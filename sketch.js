@@ -37,6 +37,17 @@ function setup() {
         stars.push(new Star());
     }
     player = new Player();
+
+    // Check for level parameter in URL (e.g., ?level=3)
+    let params = new URLSearchParams(window.location.search);
+    let levelParam = params.get('level');
+    if (levelParam) {
+        level = parseInt(levelParam);
+        if (!isNaN(level) && level >= 1 && level <= 3) {
+            currentState = GameState.PLAYING;
+            startLevel(level);
+        }
+    }
 }
 
 function windowResized() {
@@ -359,8 +370,8 @@ function startLevel(l) {
 
     if (l === 1 || l === 2) {
         // Formation of birds
-        let rows = l === 1 ? 3 : 4;
-        let cols = 8;
+        let rows = l === 1 ? 3 : 3;
+        let cols = l === 1 ? 8 : 8;
         let spacingX = Math.min(80, width / (cols + 1));
         let spacingY = 60;
         let centerX = width / 2;
@@ -673,15 +684,15 @@ class Bird {
         this.lvl = lvl; // 1 or 2
 
         this.w = lvl === 1 ? 30 : 40;
-        this.hp = lvl === 1 ? 10 : 20;
+        this.hp = lvl === 1 ? 10 : 10; // Level 2 now same HP as Level 1
         this.scoreValue = lvl === 1 ? 50 : 100;
         this.color = lvl === 1 ? color(255, 100, 200) : color(100, 255, 150);
 
         this.isDiving = false;
         this.time = random(1000);
 
-        this.fireRate = lvl === 1 ? 0.002 : 0.005;
-        this.diveRate = lvl === 1 ? 0.001 : 0.003;
+        this.fireRate = lvl === 1 ? 0.002 : 0.003; // Reduced fire rate
+        this.diveRate = lvl === 1 ? 0.001 : 0.002; // Reduced dive rate
     }
     update() {
         this.time += 0.05;
@@ -710,8 +721,8 @@ class Bird {
             this.diveTimer++;
 
             // All birds home in on the player
-            let homingStrength = this.lvl === 1 ? 0.02 : 0.05;
-            let targetVec = createVector(player.x - this.x, player.y - this.y).normalize().mult(this.lvl === 1 ? 5 : 7);
+            let homingStrength = this.lvl === 1 ? 0.02 : 0.03; // Level 2 homing nerfed to 3%
+            let targetVec = createVector(player.x - this.x, player.y - this.y).normalize().mult(this.lvl === 1 ? 5 : 6); // Level 2 speed nerfed to 6
             this.diveVec.lerp(targetVec, homingStrength);
 
             // Return to formation after 3 seconds OR when too far offscreen
