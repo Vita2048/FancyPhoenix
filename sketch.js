@@ -19,6 +19,7 @@ let enemyBullets = [];
 let player;
 let keys = {};
 let transitionTimer = 0;
+let formationCenter = { x: 0, y: 0 }; // shared formation center that tracks the player
 
 let playerImg, bird1Img, bird2Img, mothershipImg;
 
@@ -122,9 +123,7 @@ function updateGame() {
 
     for (let i = enemies.length - 1; i >= 0; i--) {
         enemies[i].update();
-        if (enemies[i].isDead) { // Can be marked dead by bounds
-            enemies.splice(i, 1);
-        }
+        // Birds are ONLY removed when HP <= 0 in checkCollisions
     }
 
     checkCollisions();
@@ -364,12 +363,16 @@ function startLevel(l) {
         let cols = 8;
         let spacingX = Math.min(80, width / (cols + 1));
         let spacingY = 60;
-        let startX = width / 2 - (cols * spacingX) / 2 + spacingX / 2;
-        let startY = 100;
+        let centerX = width / 2;
+        let centerY = 100 + (rows * spacingY) / 2;
+        formationCenter.x = centerX;
+        formationCenter.y = centerY;
 
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
-                enemies.push(new Bird(startX + c * spacingX, startY + r * spacingY, l));
+                let bx = (c - (cols - 1) / 2) * spacingX;
+                let by = (r - (rows - 1) / 2) * spacingY;
+                enemies.push(new Bird(bx, by, l));
             }
         }
     } else if (l === 3) {
@@ -511,9 +514,9 @@ class Player {
             if (keys[UP_ARROW]) this.y -= this.speed;
             if (keys[DOWN_ARROW]) this.y += this.speed;
 
-            // Constrain
+            // Constrain - free movement anywhere on screen
             this.x = constrain(this.x, this.w / 2, width - this.w / 2);
-            this.y = constrain(this.y, this.h / 2 + 50, height - this.h / 2);
+            this.y = constrain(this.y, this.h / 2, height - this.h / 2);
 
             // Shooting
             if (this.shootCooldown > 0) this.shootCooldown--;
@@ -622,38 +625,51 @@ class Player {
 }
 
 class Bullet {
-    constructor(x, y, isPlayer) {
+    constructor(x, y, isPlayer, vx = 0, vy = null) {
         this.x = x;
         this.y = y;
         this.isPlayer = isPlayer;
-        this.speed = isPlayer ? 24 : -12; // increased speeds for better pacing
+        this.vx = vx;
+        this.vy = vy !== null ? vy : (isPlayer ? -24 : 12);
         this.w = 6;
         this.h = 16;
+        // calculate angle for drawing rotated bullets if they are aimed
+        if (vx !== 0 || vy !== null) {
+            this.angle = atan2(this.vy, this.vx) - HALF_PI;
+        } else {
+            this.angle = 0;
+        }
     }
     update() {
-        this.y -= this.speed; // if player moves up (speed > 0), if enemy moves down (speed < 0 -> y -= -8 -> y += 8)
+        this.x += this.vx;
+        this.y += this.vy;
     }
     draw() {
+        push();
+        translate(this.x, this.y);
+        rotate(this.angle);
         noStroke();
         let col = this.isPlayer ? color(255, 200, 0) : color(255, 50, 50);
         fill(col);
         drawingContext.shadowBlur = 10;
         drawingContext.shadowColor = col.toString();
         rectMode(CENTER);
-        rect(this.x, this.y, this.w, this.h, 3);
+        rect(0, 0, this.w, this.h, 3);
         rectMode(CORNER);
+        pop();
     }
     isOffscreen() {
-        return this.y < -50 || this.y > height + 50;
+        return this.y < -50 || this.y > height + 50 || this.x < -50 || this.x > width + 50;
     }
 }
 
 class Bird {
-    constructor(x, y, lvl) {
-        this.spawnX = x;
-        this.spawnY = y;
-        this.x = x;
-        this.y = y;
+    constructor(offsetX, offsetY, lvl) {
+        // offsets relative to the shared formationCenter
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
+        this.x = formationCenter.x + offsetX;
+        this.y = formationCenter.y + offsetY;
         this.lvl = lvl; // 1 or 2
 
         this.w = lvl === 1 ? 30 : 40;
@@ -670,35 +686,45 @@ class Bird {
     update() {
         this.time += 0.05;
 
+        // Formation center drifts toward the player (shared, so apply tiny per-bird fraction)
+        formationCenter.x += (player.x - formationCenter.x) * 0.0002;
+        formationCenter.y += (player.y - 120 - formationCenter.y) * 0.0001;
+
         if (!this.isDiving) {
             // Sway in formation
             let swayX = sin(this.time) * 50;
             let swayY = cos(this.time * 2) * 20;
-            this.x = this.spawnX + swayX;
-            this.y = this.spawnY + swayY;
+            this.x = formationCenter.x + this.offsetX + swayX;
+            this.y = formationCenter.y + this.offsetY + swayY;
 
-            // Randomly start diving
-            if (random() < this.diveRate) {
+            // Aggressively start diving toward the player
+            if (random() < this.diveRate * 2) {
                 this.isDiving = true;
-                this.diveVec = createVector(player.x - this.x, height - this.y).normalize().mult(this.lvl === 1 ? 4 : 6);
+                this.diveVec = createVector(player.x - this.x, player.y - this.y).normalize().mult(this.lvl === 1 ? 5 : 7);
+                this.diveTimer = 0;
             }
         } else {
-            // Dive logic
+            // Dive logic - strong homing toward player
             this.x += this.diveVec.x;
             this.y += this.diveVec.y;
+            this.diveTimer++;
 
-            if (this.lvl === 2) {
-                this.x += sin(this.time * 3) * 5; // erratic diving
-            }
+            // All birds home in on the player
+            let homingStrength = this.lvl === 1 ? 0.02 : 0.05;
+            let targetVec = createVector(player.x - this.x, player.y - this.y).normalize().mult(this.lvl === 1 ? 5 : 7);
+            this.diveVec.lerp(targetVec, homingStrength);
 
-            if (this.y > height + 50) {
-                this.isDead = true; // goes offscreen
+            // Return to formation after 3 seconds OR when too far offscreen
+            if (this.diveTimer > 180 || this.y > height + 100 || this.y < -100 || this.x < -100 || this.x > width + 100) {
+                this.isDiving = false;
+                this.x = formationCenter.x + this.offsetX;
+                this.y = formationCenter.y + this.offsetY;
             }
         }
 
-        // Shooting
+        // Eggs drop straight down only
         if (random() < this.fireRate) {
-            enemyBullets.push(new Bullet(this.x, this.y + this.w / 2, false));
+            enemyBullets.push(new Bullet(this.x, this.y + this.w / 2, false, 0, 10));
         }
     }
     draw() {
@@ -768,9 +794,9 @@ class Mothership {
             s.angle += 0.02;
         }
 
-        // Fire bullets down
+        // Mothership eggs drop straight down
         if (random() < 0.05) {
-            enemyBullets.push(new Bullet(this.x + random(-this.w / 3, this.w / 3), this.y + 40, false));
+            enemyBullets.push(new Bullet(this.x + random(-this.w / 3, this.w / 3), this.y + 40, false, 0, 10));
         }
     }
     draw() {
@@ -794,7 +820,7 @@ class Mothership {
         ellipse(0, 0, 30, 20 + sin(this.time * 5) * 10);
         blendMode(BLEND);
 
-        // Draw rotating shields
+        // Draw full rotating shields
         noFill();
         stroke(0, 255, 255);
         strokeWeight(4);
@@ -803,10 +829,9 @@ class Mothership {
             if (s.active) {
                 let x = cos(s.angle) * this.shieldRadius;
                 let y = sin(s.angle) * this.shieldRadius;
-                if (y > 0) { // Only draw lower half shields for simplicity and to block player shots
-                    line(x, y, x + cos(s.angle + HALF_PI) * 15, y + sin(s.angle + HALF_PI) * 15);
-                    circle(x, y, 10);
-                }
+                // Draw all shields so player can't hide safely above!
+                line(x, y, x + cos(s.angle + HALF_PI) * 15, y + sin(s.angle + HALF_PI) * 15);
+                circle(x, y, 10);
             }
         }
 
@@ -833,13 +858,12 @@ class Mothership {
                 let sx = this.x + cos(s.angle) * this.shieldRadius;
                 let sy = this.y + sin(s.angle) * this.shieldRadius;
 
-                if (sy > this.y) { // Only lower shields take hits
-                    let d = dist(sx, sy, b.x, b.y);
-                    if (d < 25) {
-                        s.hp -= 10;
-                        if (s.hp <= 0) s.active = false;
-                        return true;
-                    }
+                // Check collisions against full 360 degree 
+                let d = dist(sx, sy, b.x, b.y);
+                if (d < 25) {
+                    s.hp -= 10;
+                    if (s.hp <= 0) s.active = false;
+                    return true;
                 }
             }
         }
