@@ -234,12 +234,13 @@ function drawUI() {
     text(`LEVEL: ${level}`, 20, 50);
 
     // Draw Lives
-    text(`HP: `, 20, 80);
+    text(`LIVES: `, 20, 80);
     for (let i = 0; i < player.hp; i++) {
         fill(255, 50, 50);
         drawingContext.shadowBlur = 10;
         drawingContext.shadowColor = color(255, 50, 50).toString();
-        triangle(70 + i * 25, 80 + 10, 70 + i * 25 + 15, 80, 70 + i * 25 + 15, 80 + 20);
+        // offset origin to 100 instead of 70 to clear the longer text
+        triangle(100 + i * 25, 80 + 10, 100 + i * 25 + 15, 80, 100 + i * 25 + 15, 80 + 20);
     }
 
     // Draw Shield UI
