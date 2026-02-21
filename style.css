@@ -1,0 +1,11 @@
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #050510;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+canvas {
+    display: block;
+}
