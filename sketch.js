@@ -507,9 +507,12 @@ class Player {
             // Movement
             if (keys[LEFT_ARROW]) this.x -= this.speed;
             if (keys[RIGHT_ARROW]) this.x += this.speed;
+            if (keys[UP_ARROW]) this.y -= this.speed;
+            if (keys[DOWN_ARROW]) this.y += this.speed;
 
             // Constrain
             this.x = constrain(this.x, this.w / 2, width - this.w / 2);
+            this.y = constrain(this.y, this.h / 2 + 50, height - this.h / 2);
 
             // Shooting
             if (this.shootCooldown > 0) this.shootCooldown--;
