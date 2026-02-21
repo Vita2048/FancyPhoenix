@@ -96,10 +96,7 @@ function updateGame() {
     if (currentState === GameState.PLAYING) {
         player.update();
 
-        // Spawn formations or Mothership
-        if (enemies.length === 0 && level <= 3) {
-            startLevel(level);
-        }
+        // Spawn formations handled in progression logic now
     }
 
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -132,13 +129,13 @@ function updateGame() {
 
     checkCollisions();
 
-    if (currentState === GameState.PLAYING && enemies.length === 0 && particles.length === 0) {
-        if (level === 3) {
+    if (currentState === GameState.PLAYING && enemies.length === 0) {
+        if (level >= 3) { // fixed to be >= 3 instead of === 3
             currentState = GameState.WIN;
         } else {
             currentState = GameState.TRANSIION;
             transitionTimer = 180; // 3 seconds at 60fps
-            level++;
+            // level will be incremented in drawTransition once timer completes
         }
     }
 }
@@ -310,6 +307,8 @@ function drawTransition() {
     transitionTimer--;
     if (transitionTimer <= 0) {
         currentState = GameState.PLAYING;
+        level++;
+        startLevel(level);
     }
 }
 
@@ -385,6 +384,7 @@ function keyPressed() {
         score = 0;
         level = 1;
         player = new Player();
+        startLevel(level);
     }
 
     if (currentState === GameState.GAMEOVER || currentState === GameState.WIN) {
@@ -552,11 +552,37 @@ class Player {
         image(playerImg, 0, 0, this.w * 2, this.h * 2);
         blendMode(BLEND);
 
-        // Jet flame
+        // Detailed layered engine flame
         if (!this.shieldActive) {
-            fill(255, random(100, 200), 0);
-            drawingContext.shadowColor = color(255, 100, 0).toString();
-            triangle(-10, this.h / 2 + 2, 10, this.h / 2 + 2, 0, this.h / 2 + random(10, 25));
+            let flameHeight = random(25, 40);
+
+            // Outer cyan glow
+            drawingContext.shadowBlur = 15;
+            drawingContext.shadowColor = color(0, 150, 255).toString();
+            fill(0, 150, 255, 150);
+            noStroke();
+            beginShape();
+            vertex(-14, this.h / 2 - 5);
+            vertex(14, this.h / 2 - 5);
+            vertex(0, this.h / 2 + flameHeight);
+            endShape(CLOSE);
+
+            // Inner yellow/orange core
+            drawingContext.shadowBlur = 0;
+            fill(255, 200, 50);
+            beginShape();
+            vertex(-8, this.h / 2 - 5);
+            vertex(8, this.h / 2 - 5);
+            vertex(0, this.h / 2 + flameHeight * 0.7);
+            endShape(CLOSE);
+
+            // Core hot white
+            fill(255, 255, 255);
+            beginShape();
+            vertex(-4, this.h / 2 - 5);
+            vertex(4, this.h / 2 - 5);
+            vertex(0, this.h / 2 + flameHeight * 0.4);
+            endShape(CLOSE);
         }
 
         pop();
