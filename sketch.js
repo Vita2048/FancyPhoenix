@@ -20,14 +20,20 @@ let player;
 let keys = {};
 let transitionTimer = 0;
 let formationCenter = { x: 0, y: 0 }; // shared formation center that tracks the player
+let gunUpgrades = [];
+let powerUpDroppedThisLevel = false;
 
 let playerImg, bird1Img, bird2Img, mothershipImg;
+let gunUpgradeLvl1Img, gunUpgradeLvl2Img, gunUpgradeLvl3Img;
 
 function preload() {
     playerImg = loadImage('player.png');
     bird1Img = loadImage('bird1.png');
     bird2Img = loadImage('bird2.png');
     mothershipImg = loadImage('mothership.png');
+    gunUpgradeLvl1Img = loadImage('upgrade-gun-lvl1.svg');
+    gunUpgradeLvl2Img = loadImage('upgrade-gun-lvl2.svg');
+    gunUpgradeLvl3Img = loadImage('upgrade-gun-lvl3.svg');
 }
 
 function setup() {
@@ -98,6 +104,7 @@ function drawGame() {
     player.draw();
     for (let b of bullets) b.draw();
     for (let eb of enemyBullets) eb.draw();
+    for (let g of gunUpgrades) g.draw();
     for (let e of enemies) e.draw();
     for (let p of particles) p.draw();
 
@@ -132,6 +139,13 @@ function updateGame() {
         }
     }
 
+    for (let i = gunUpgrades.length - 1; i >= 0; i--) {
+        gunUpgrades[i].update();
+        if (gunUpgrades[i].isOffscreen()) {
+            gunUpgrades.splice(i, 1);
+        }
+    }
+
     for (let i = enemies.length - 1; i >= 0; i--) {
         enemies[i].update();
         // Birds are ONLY removed when HP <= 0 in checkCollisions
@@ -159,7 +173,7 @@ function checkCollisions() {
         for (let j = enemies.length - 1; j >= 0; j--) {
             let e = enemies[j];
             if (e.collidesWith(b)) {
-                e.takeDamage(10);
+                e.takeDamage(b.damage);
                 createExplosion(b.x, b.y, color(255, 200, 50), 10);
                 bullets.splice(i, 1);
                 hit = true;
@@ -169,6 +183,15 @@ function checkCollisions() {
                     createExplosion(e.x, e.y, e.color, 30);
                     shakeAmount = 5;
                     enemies.splice(j, 1);
+
+                    // Drop gun upgrade at random (once per level)
+                    if (!powerUpDroppedThisLevel) {
+                        // 15% chance, or guaranteed if it's the last bird
+                        if (random() < 0.15 || enemies.length === 0) {
+                            gunUpgrades.push(new PowerUp(e.x, e.y, level));
+                            powerUpDroppedThisLevel = true;
+                        }
+                    }
                 }
                 break;
             }
@@ -222,6 +245,18 @@ function checkCollisions() {
                 player.invulnerable = true;
                 player.invulnerableTimer = 90; // 1.5 seconds of i-frames
             }
+        }
+    }
+
+    // Player collects power-ups
+    for (let i = gunUpgrades.length - 1; i >= 0; i--) {
+        let g = gunUpgrades[i];
+        if (g.collidesWith(player)) {
+            player.gunLevel = g.lvl;
+            score += 500;
+            createExplosion(g.x, g.y, g.color, 40);
+            shakeAmount = 10;
+            gunUpgrades.splice(i, 1);
         }
     }
 }
@@ -367,6 +402,8 @@ function startLevel(l) {
     enemies = [];
     enemyBullets = [];
     bullets = [];
+    gunUpgrades = [];
+    powerUpDroppedThisLevel = false;
 
     if (l === 1 || l === 2) {
         // Formation of birds
@@ -388,6 +425,9 @@ function startLevel(l) {
         }
     } else if (l === 3) {
         enemies.push(new Mothership(width / 2, 150));
+        // Add escort birds for level 3 upgrade drop
+        enemies.push(new Bird(-150, 50, 3));
+        enemies.push(new Bird(150, 50, 3));
     }
 }
 
@@ -492,6 +532,7 @@ class Player {
         this.w = 40;
         this.h = 40;
         this.speed = 7;
+        this.gunLevel = 0;
 
         this.shootCooldown = 0;
         this.maxShootCooldown = 12;
@@ -502,13 +543,15 @@ class Player {
         this.shieldCooldown = 300; // 5 seconds recovery
         this.shieldCooldownTimer = 0;
 
-        this.invulnerable = true;
-        this.invulnerableTimer = 120; // 2 secs spawn protection
+        this.invulnerable = false;
+        this.invulnerableTimer = 0;
 
-        this.hp = 3; // Give the player 3 lives/HP
+        this.hp = 3;
+
     }
     update() {
         if (this.invulnerableTimer > 0) this.invulnerableTimer--;
+
 
         if (this.shieldActive) {
             this.shieldTimer--;
@@ -538,8 +581,26 @@ class Player {
         }
     }
     shoot() {
-        bullets.push(new Bullet(this.x, this.y - this.h / 2, true));
-        // add small recoil or sound visual
+        let dmg = 10 + (this.gunLevel * 10);
+
+        if (this.gunLevel === 0) {
+            bullets.push(new Bullet(this.x, this.y - this.h / 2, true, 0, null, dmg));
+        } else if (this.gunLevel === 1) {
+            // Level 1: Twin shots
+            bullets.push(new Bullet(this.x - 12, this.y - this.h / 2, true, 0, null, dmg));
+            bullets.push(new Bullet(this.x + 12, this.y - this.h / 2, true, 0, null, dmg));
+        } else if (this.gunLevel === 2) {
+            // Level 2: Triple spread
+            bullets.push(new Bullet(this.x - 15, this.y - this.h / 2, true, -2, null, dmg));
+            bullets.push(new Bullet(this.x, this.y - this.h / 2, true, 0, null, dmg));
+            bullets.push(new Bullet(this.x + 15, this.y - this.h / 2, true, 2, null, dmg));
+        } else {
+            // Level 3+: Mega burst
+            for (let i = -2; i <= 2; i++) {
+                bullets.push(new Bullet(this.x + i * 10, this.y - this.h / 2, true, i * 1.5, null, dmg));
+            }
+        }
+
         createExplosion(this.x, this.y - this.h / 2, color(255, 200, 100), 2);
     }
     activateShield() {
@@ -555,7 +616,6 @@ class Player {
         if (this.invulnerableTimer > 0) {
             this.invulnerable = true;
             if (floor(frameCount / 4) % 2 === 0) {
-                // blinking effect for i-frames
                 pop();
                 return;
             }
@@ -563,9 +623,37 @@ class Player {
             this.invulnerable = false;
         }
 
+
         // Draw Player Ship
         imageMode(CENTER);
         blendMode(ADD);
+
+        // Visual Upgrades based on gunLevel
+        if (this.gunLevel > 0) {
+            push();
+            noFill();
+            strokeWeight(2);
+            let col = this.gunLevel === 1 ? color(255, 200, 0) : (this.gunLevel === 2 ? color(0, 255, 255) : color(255, 0, 255));
+            stroke(col);
+            drawingContext.shadowBlur = 10;
+            drawingContext.shadowColor = col.toString();
+
+            // Draw extra cannons
+            rectMode(CENTER);
+            if (this.gunLevel >= 1) {
+                rect(-15, 5, 6, 15);
+                rect(15, 5, 6, 15);
+            }
+            if (this.gunLevel >= 2) {
+                rect(-25, 10, 6, 20);
+                rect(25, 10, 6, 20);
+            }
+            if (this.gunLevel >= 3) {
+                ellipse(0, -10, 40, 10); // Halo
+            }
+            pop();
+        }
+
         drawingContext.shadowBlur = 0; // removed to fix rectangular glow
         image(playerImg, 0, 0, this.w * 2, this.h * 2);
         blendMode(BLEND);
@@ -636,12 +724,13 @@ class Player {
 }
 
 class Bullet {
-    constructor(x, y, isPlayer, vx = 0, vy = null) {
+    constructor(x, y, isPlayer, vx = 0, vy = null, damage = 10) {
         this.x = x;
         this.y = y;
         this.isPlayer = isPlayer;
         this.vx = vx;
         this.vy = vy !== null ? vy : (isPlayer ? -24 : 12);
+        this.damage = damage;
         this.w = 6;
         this.h = 16;
         // calculate angle for drawing rotated bullets if they are aimed
@@ -661,8 +750,14 @@ class Bullet {
         rotate(this.angle);
         noStroke();
         let col = this.isPlayer ? color(255, 200, 0) : color(255, 50, 50);
+        // Visual power boost for player bullets
+        if (this.isPlayer && this.damage > 10) {
+            col = lerpColor(col, color(255, 255, 255), 0.3);
+            this.w = 8;
+            this.h = 24;
+        }
         fill(col);
-        drawingContext.shadowBlur = 10;
+        drawingContext.shadowBlur = 15;
         drawingContext.shadowColor = col.toString();
         rectMode(CENTER);
         rect(0, 0, this.w, this.h, 3);
@@ -684,9 +779,9 @@ class Bird {
         this.lvl = lvl; // 1 or 2
 
         this.w = lvl === 1 ? 30 : 40;
-        this.hp = lvl === 1 ? 10 : 10; // Level 2 now same HP as Level 1
-        this.scoreValue = lvl === 1 ? 50 : 100;
-        this.color = lvl === 1 ? color(255, 100, 200) : color(100, 255, 150);
+        this.hp = lvl === 3 ? 30 : 10;
+        this.scoreValue = lvl === 1 ? 50 : (lvl === 2 ? 100 : 200);
+        this.color = lvl === 1 ? color(255, 100, 200) : (lvl === 2 ? color(100, 255, 150) : color(255, 50, 50));
 
         this.isDiving = false;
         this.time = random(1000);
@@ -751,8 +846,13 @@ class Bird {
 
         if (this.lvl === 1) {
             image(bird1Img, 0, 0, this.w * 2.5, this.w * 2.5);
-        } else {
+        } else if (this.lvl === 2) {
             image(bird2Img, 0, 0, this.w * 2.5, this.w * 2.5);
+        } else {
+            // Level 3 bird
+            tint(255, 100, 100);
+            image(bird2Img, 0, 0, this.w * 3, this.w * 3);
+            noTint();
         }
 
         blendMode(BLEND);
@@ -872,7 +972,7 @@ class Mothership {
                 // Check collisions against full 360 degree 
                 let d = dist(sx, sy, b.x, b.y);
                 if (d < 25) {
-                    s.hp -= 10;
+                    s.hp -= b.damage;
                     if (s.hp <= 0) s.active = false;
                     return true;
                 }
@@ -882,5 +982,108 @@ class Mothership {
     }
     takeDamage(amt) {
         this.hp -= amt;
+    }
+}
+
+class PowerUp {
+    constructor(x, y, lvl) {
+        this.x = x;
+        this.y = y;
+        this.lvl = lvl;
+        this.w = 30;
+        this.h = 30;
+        this.speedY = 3;
+        this.angle = 0;
+        this.icon = null;
+
+        if (lvl === 1) this.color = color(255, 200, 0);     // Gold
+        else if (lvl === 2) this.color = color(0, 255, 255); // Cyan
+        else this.color = color(255, 0, 255);               // Magenta
+
+        if (lvl === 1) this.icon = gunUpgradeLvl1Img;
+        else if (lvl === 2) this.icon = gunUpgradeLvl2Img;
+        else this.icon = gunUpgradeLvl3Img;
+    }
+
+    update() {
+        this.y += this.speedY;
+        this.angle += 0.05;
+    }
+
+    draw() {
+        push();
+        translate(this.x, this.y);
+
+        let floatY = sin(frameCount * 0.11) * 7;
+        translate(0, floatY);
+
+        let pulse = sin(frameCount * 0.18) * 0.5 + 0.5;
+
+        // Outer glow halo
+        drawingContext.shadowBlur = 34;
+        drawingContext.shadowColor = this.color.toString();
+        fill(red(this.color), green(this.color), blue(this.color), 35);
+        noStroke();
+        ellipse(0, 0, 66 + pulse * 10, 66 + pulse * 10);
+
+        // Tech ring
+        drawingContext.shadowBlur = 22;
+        noFill();
+        stroke(this.color);
+        strokeWeight(2.5);
+        circle(0, 0, 48);
+
+        // Orbiting accent ring
+        drawingContext.shadowBlur = 14;
+        stroke(255, 255, 255, 190);
+        strokeWeight(3);
+        push();
+        rotate(this.angle * 0.7);
+        arc(0, 0, 40, 40, -PI / 4, PI / 2);
+        arc(0, 0, 40, 40, PI * 0.75, PI * 1.45);
+        pop();
+
+        // Render icon asset
+        imageMode(CENTER);
+        drawingContext.shadowBlur = 18;
+        drawingContext.shadowColor = this.color.toString();
+        if (this.icon) {
+            image(this.icon, 0, 0, 52, 52);
+        } else {
+            // Fallback if an asset fails to load
+            fill(this.color);
+            noStroke();
+            circle(0, 0, 18);
+        }
+
+        // Level number
+        textAlign(CENTER, CENTER);
+        textSize(13);
+        drawingContext.shadowBlur = 15;
+        drawingContext.shadowColor = '#ffffff';
+        fill(255);
+        text(this.lvl, 0, 30);
+
+        // Orbiting energy nodes
+        for (let i = 0; i < 4; i++) {
+            let a = this.angle * 2.8 + i * (TWO_PI / 4);
+            let ox = cos(a) * 31;
+            let oy = sin(a) * 31;
+            fill(255);
+            drawingContext.shadowBlur = 12;
+            drawingContext.shadowColor = this.color.toString();
+            ellipse(ox, oy, 5, 5);
+        }
+
+        pop();
+    }
+
+    isOffscreen() {
+        return this.y > height + 50;
+    }
+
+    collidesWith(p) {
+        let d = dist(this.x, this.y, p.x, p.y);
+        return d < (this.w / 2 + p.w / 2);
     }
 }

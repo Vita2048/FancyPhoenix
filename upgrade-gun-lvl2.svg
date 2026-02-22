@@ -1,0 +1,32 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg2" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(128 128) rotate(90) scale(112)">
+      <stop stop-color="#102630"/>
+      <stop offset="1" stop-color="#0E131D"/>
+    </radialGradient>
+    <linearGradient id="gun2" x1="50" y1="104" x2="206" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9AFFFF"/>
+      <stop offset="1" stop-color="#2DD1FF"/>
+    </linearGradient>
+    <linearGradient id="down2" x1="128" y1="134" x2="128" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8FFFF"/>
+      <stop offset="1" stop-color="#18B4E4"/>
+    </linearGradient>
+    <filter id="glow2" x="0" y="0" width="256" height="256" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feBlend in="SourceGraphic" in2="blur" mode="screen"/>
+    </filter>
+  </defs>
+
+  <circle cx="128" cy="128" r="114" fill="url(#bg2)" stroke="#53E0FF" stroke-width="8"/>
+  <g filter="url(#glow2)">
+    <path d="M46 94H170C183 94 194 105 194 118C194 131 183 142 170 142H122L102 162H80L92 142H46C33 142 22 131 22 118C22 105 33 94 46 94Z" fill="url(#gun2)"/>
+    <rect x="168" y="78" width="62" height="18" rx="9" fill="#1DAED6"/>
+    <rect x="150" y="70" width="34" height="8" rx="4" fill="#9FFFFF"/>
+    <circle cx="68" cy="118" r="10" fill="#123B4A"/>
+
+    <path d="M128 136L176 186H148V224H108V186H80L128 136Z" fill="url(#down2)"/>
+    <path d="M128 145L164 183H140V214H116V183H92L128 145Z" fill="#F3FFFF" fill-opacity="0.4"/>
+    <rect x="120" y="122" width="16" height="16" rx="4" fill="#B4FFFF"/>
+  </g>
+</svg>
