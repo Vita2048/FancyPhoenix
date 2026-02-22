@@ -31,9 +31,9 @@ function preload() {
     bird1Img = loadImage('bird1.png');
     bird2Img = loadImage('bird2.png');
     mothershipImg = loadImage('mothership.png');
-    gunUpgradeLvl1Img = loadImage('upgrade-gun-lvl1.svg');
-    gunUpgradeLvl2Img = loadImage('upgrade-gun-lvl2.svg');
-    gunUpgradeLvl3Img = loadImage('upgrade-gun-lvl3.svg');
+    gunUpgradeLvl1Img = loadImage('gun_1.png');
+    gunUpgradeLvl2Img = loadImage('gun_2.png');
+    gunUpgradeLvl3Img = loadImage('gun_3.png');
 }
 
 function setup() {
@@ -633,7 +633,10 @@ class Player {
             push();
             noFill();
             strokeWeight(2);
-            let col = this.gunLevel === 1 ? color(255, 200, 0) : (this.gunLevel === 2 ? color(0, 255, 255) : color(255, 0, 255));
+            let col;
+            if (this.gunLevel === 1) col = color(0, 255, 255);      // Cyan-Blue
+            else if (this.gunLevel === 2) col = color(255, 0, 255); // Magenta
+            else col = color(255, 50, 50);                          // Red
             stroke(col);
             drawingContext.shadowBlur = 10;
             drawingContext.shadowColor = col.toString();
@@ -749,15 +752,25 @@ class Bullet {
         translate(this.x, this.y);
         rotate(this.angle);
         noStroke();
-        let col = this.isPlayer ? color(255, 200, 0) : color(255, 50, 50);
+        let col;
+        if (this.isPlayer) {
+            if (this.damage === 20) col = color(0, 255, 255);      // Lvl 1: Cyan-Blue
+            else if (this.damage === 30) col = color(255, 0, 255); // Lvl 2: Magenta
+            else if (this.damage >= 40) col = color(255, 50, 50);  // Lvl 3+: Red
+            else col = color(255, 200, 0);                         // Lvl 0: Gold
+        } else {
+            col = color(255, 50, 50); // Enemy bullets
+        }
+
         // Visual power boost for player bullets
         if (this.isPlayer && this.damage > 10) {
-            col = lerpColor(col, color(255, 255, 255), 0.3);
             this.w = 8;
             this.h = 24;
+            drawingContext.shadowBlur = 20;
+        } else {
+            drawingContext.shadowBlur = 15;
         }
         fill(col);
-        drawingContext.shadowBlur = 15;
         drawingContext.shadowColor = col.toString();
         rectMode(CENTER);
         rect(0, 0, this.w, this.h, 3);
@@ -990,15 +1003,15 @@ class PowerUp {
         this.x = x;
         this.y = y;
         this.lvl = lvl;
-        this.w = 30;
-        this.h = 30;
+        this.w = 40;
+        this.h = 40;
         this.speedY = 3;
         this.angle = 0;
         this.icon = null;
 
-        if (lvl === 1) this.color = color(255, 200, 0);     // Gold
-        else if (lvl === 2) this.color = color(0, 255, 255); // Cyan
-        else this.color = color(255, 0, 255);               // Magenta
+        if (lvl === 1) this.color = color(0, 255, 255);      // Cyan-Blue
+        else if (lvl === 2) this.color = color(255, 0, 255); // Magenta
+        else this.color = color(255, 50, 50);               // Red
 
         if (lvl === 1) this.icon = gunUpgradeLvl1Img;
         else if (lvl === 2) this.icon = gunUpgradeLvl2Img;
@@ -1017,63 +1030,61 @@ class PowerUp {
         let floatY = sin(frameCount * 0.11) * 7;
         translate(0, floatY);
 
-        let pulse = sin(frameCount * 0.18) * 0.5 + 0.5;
+        let pulse = sin(frameCount * 0.16) * 0.5 + 0.5;
+        let iconScale = 1.12 + pulse * 0.14; // bigger icon + sync pulse with glow
+        let iconSize = 84 * iconScale;
+        let glowRadius = 19 + pulse * 3;
 
-        // Outer glow halo
-        drawingContext.shadowBlur = 34;
-        drawingContext.shadowColor = this.color.toString();
-        fill(red(this.color), green(this.color), blue(this.color), 35);
+        // Subtle radial glow that matches each gun laser color
+        let ctx = drawingContext;
+        let glowInner;
+        let glowMid;
+        let glowOuter;
+        if (this.lvl === 1) {
+            glowInner = 'rgba(190, 245, 255, 0.36)';
+            glowMid = 'rgba(90, 210, 255, 0.20)';
+            glowOuter = 'rgba(45, 165, 255, 0)';
+        } else if (this.lvl === 2) {
+            glowInner = 'rgba(255, 190, 255, 0.36)';
+            glowMid = 'rgba(255, 95, 230, 0.20)';
+            glowOuter = 'rgba(220, 70, 255, 0)';
+        } else {
+            glowInner = 'rgba(255, 215, 210, 0.36)';
+            glowMid = 'rgba(255, 120, 120, 0.20)';
+            glowOuter = 'rgba(255, 70, 70, 0)';
+        }
+        let blueGradient = ctx.createRadialGradient(0, 0, 4, 0, 0, glowRadius);
+        blueGradient.addColorStop(0, glowInner);
+        blueGradient.addColorStop(0.45, glowMid);
+        blueGradient.addColorStop(1, glowOuter);
+        ctx.shadowBlur = 12 + pulse * 4;
+        ctx.shadowColor = glowMid;
+        ctx.fillStyle = blueGradient;
         noStroke();
-        ellipse(0, 0, 66 + pulse * 10, 66 + pulse * 10);
-
-        // Tech ring
-        drawingContext.shadowBlur = 22;
-        noFill();
-        stroke(this.color);
-        strokeWeight(2.5);
-        circle(0, 0, 48);
-
-        // Orbiting accent ring
-        drawingContext.shadowBlur = 14;
-        stroke(255, 255, 255, 190);
-        strokeWeight(3);
-        push();
-        rotate(this.angle * 0.7);
-        arc(0, 0, 40, 40, -PI / 4, PI / 2);
-        arc(0, 0, 40, 40, PI * 0.75, PI * 1.45);
-        pop();
+        ellipse(0, 0, glowRadius * 2, glowRadius * 2);
 
         // Render icon asset
         imageMode(CENTER);
-        drawingContext.shadowBlur = 18;
-        drawingContext.shadowColor = this.color.toString();
+        drawingContext.shadowBlur = 8 + pulse * 3;
+        drawingContext.shadowColor = glowMid;
         if (this.icon) {
-            image(this.icon, 0, 0, 52, 52);
+            image(this.icon, 0, 0, iconSize, iconSize);
         } else {
             // Fallback if an asset fails to load
             fill(this.color);
             noStroke();
-            circle(0, 0, 18);
+            circle(0, 0, 22 * iconScale);
         }
 
         // Level number
         textAlign(CENTER, CENTER);
         textSize(13);
-        drawingContext.shadowBlur = 15;
+        drawingContext.shadowBlur = 10;
         drawingContext.shadowColor = '#ffffff';
         fill(255);
-        text(this.lvl, 0, 30);
+        text(this.lvl, 0, 34);
 
-        // Orbiting energy nodes
-        for (let i = 0; i < 4; i++) {
-            let a = this.angle * 2.8 + i * (TWO_PI / 4);
-            let ox = cos(a) * 31;
-            let oy = sin(a) * 31;
-            fill(255);
-            drawingContext.shadowBlur = 12;
-            drawingContext.shadowColor = this.color.toString();
-            ellipse(ox, oy, 5, 5);
-        }
+        // Removed orbiting energy nodes for a cleaner look as requested
 
         pop();
     }
