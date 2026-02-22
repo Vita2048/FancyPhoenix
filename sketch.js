@@ -25,6 +25,19 @@ let powerUpDroppedThisLevel = false;
 
 let playerImg, bird1Img, bird2Img, mothershipImg;
 let gunUpgradeLvl1Img, gunUpgradeLvl2Img, gunUpgradeLvl3Img;
+const MAX_PARTICLES = 700;
+
+function distSq(x1, y1, x2, y2) {
+    let dx = x1 - x2;
+    let dy = y1 - y2;
+    return dx * dx + dy * dy;
+}
+
+function fastRemoveAt(arr, i) {
+    let last = arr.length - 1;
+    if (i !== last) arr[i] = arr[last];
+    arr.pop();
+}
 
 function preload() {
     playerImg = loadImage('player.png');
@@ -121,28 +134,28 @@ function updateGame() {
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update();
         if (particles[i].isDead()) {
-            particles.splice(i, 1);
+            fastRemoveAt(particles, i);
         }
     }
 
     for (let i = bullets.length - 1; i >= 0; i--) {
         bullets[i].update();
         if (bullets[i].isOffscreen()) {
-            bullets.splice(i, 1);
+            fastRemoveAt(bullets, i);
         }
     }
 
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
         enemyBullets[i].update();
         if (enemyBullets[i].isOffscreen()) {
-            enemyBullets.splice(i, 1);
+            fastRemoveAt(enemyBullets, i);
         }
     }
 
     for (let i = gunUpgrades.length - 1; i >= 0; i--) {
         gunUpgrades[i].update();
         if (gunUpgrades[i].isOffscreen()) {
-            gunUpgrades.splice(i, 1);
+            fastRemoveAt(gunUpgrades, i);
         }
     }
 
@@ -172,17 +185,22 @@ function checkCollisions() {
 
         for (let j = enemies.length - 1; j >= 0; j--) {
             let e = enemies[j];
+            // Broad-phase reject to reduce checks when many bullets are on screen
+            let maxDx = e.w / 2 + b.w / 2 + 6;
+            let maxDy = e.w / 2 + b.h / 2 + 6;
+            if (abs(e.x - b.x) > maxDx || abs(e.y - b.y) > maxDy) continue;
+
             if (e.collidesWith(b)) {
                 e.takeDamage(b.damage);
                 createExplosion(b.x, b.y, color(255, 200, 50), 10);
-                bullets.splice(i, 1);
+                fastRemoveAt(bullets, i);
                 hit = true;
 
                 if (e.hp <= 0) {
                     score += e.scoreValue;
                     createExplosion(e.x, e.y, e.color, 30);
                     shakeAmount = 5;
-                    enemies.splice(j, 1);
+                    fastRemoveAt(enemies, j);
 
                     // Drop gun upgrade at random (once per level)
                     if (!powerUpDroppedThisLevel) {
@@ -202,7 +220,7 @@ function checkCollisions() {
             // Check shield collision for mothership
             if (ms.collidesWithShield(b)) {
                 createExplosion(b.x, b.y, color(0, 255, 255), 5); // Hit shield spark
-                bullets.splice(i, 1);
+                fastRemoveAt(bullets, i);
             }
         }
     }
@@ -215,7 +233,7 @@ function checkCollisions() {
             let eb = enemyBullets[i];
             if (player.collidesWith(eb)) {
                 playerHit = true;
-                enemyBullets.splice(i, 1);
+                fastRemoveAt(enemyBullets, i);
                 break;
             }
         }
@@ -227,7 +245,7 @@ function checkCollisions() {
                     playerHit = true;
                     // Also destroy the bird that rammed into the player
                     e.takeDamage(100);
-                    if (e.hp <= 0) enemies.splice(i, 1);
+                    if (e.hp <= 0) fastRemoveAt(enemies, i);
                     break;
                 }
             }
@@ -256,7 +274,7 @@ function checkCollisions() {
             score += 500;
             createExplosion(g.x, g.y, g.color, 40);
             shakeAmount = 10;
-            gunUpgrades.splice(i, 1);
+            fastRemoveAt(gunUpgrades, i);
         }
     }
 }
@@ -463,7 +481,10 @@ function keyReleased() {
 }
 
 function createExplosion(x, y, col, count) {
-    for (let i = 0; i < count; i++) {
+    let capacity = MAX_PARTICLES - particles.length;
+    if (capacity <= 0) return;
+    let spawnCount = min(count, capacity);
+    for (let i = 0; i < spawnCount; i++) {
         particles.push(new Particle(x, y, col));
     }
 }
@@ -501,7 +522,10 @@ class Particle {
         this.vy = random(-3, 3);
         this.life = random(20, 40);
         this.maxLife = this.life;
-        this.color = col;
+        this.r = red(col);
+        this.g = green(col);
+        this.b = blue(col);
+        this.shadowColor = `rgb(${this.r}, ${this.g}, ${this.b})`;
     }
     update() {
         this.x += this.vx;
@@ -513,12 +537,10 @@ class Particle {
     draw() {
         noStroke();
         let alpha = map(this.life, 0, this.maxLife, 0, 255);
-        this.color.setAlpha(alpha);
-        fill(this.color);
+        fill(this.r, this.g, this.b, alpha);
         drawingContext.shadowBlur = 10;
-        drawingContext.shadowColor = this.color.toString();
+        drawingContext.shadowColor = this.shadowColor;
         circle(this.x, this.y, map(this.life, 0, this.maxLife, 1, 6));
-        this.color.setAlpha(255); // reset
     }
     isDead() {
         return this.life <= 0;
@@ -550,30 +572,35 @@ class Player {
 
     }
     update() {
-        if (this.invulnerableTimer > 0) this.invulnerableTimer--;
+        // Keep player movement and player-side timers consistent across FPS.
+        const dtFrames = constrain(deltaTime / 16.6667, 0.25, 6.0);
+        if (this.invulnerableTimer > 0) this.invulnerableTimer -= dtFrames;
+        if (this.invulnerableTimer < 0) this.invulnerableTimer = 0;
 
 
         if (this.shieldActive) {
-            this.shieldTimer--;
+            this.shieldTimer -= dtFrames;
             if (this.shieldTimer <= 0) {
                 this.shieldActive = false;
                 this.shieldCooldownTimer = this.shieldCooldown;
             }
         } else {
-            if (this.shieldCooldownTimer > 0) this.shieldCooldownTimer--;
+            if (this.shieldCooldownTimer > 0) this.shieldCooldownTimer -= dtFrames;
+            if (this.shieldCooldownTimer < 0) this.shieldCooldownTimer = 0;
 
             // Movement
-            if (keys[LEFT_ARROW]) this.x -= this.speed;
-            if (keys[RIGHT_ARROW]) this.x += this.speed;
-            if (keys[UP_ARROW]) this.y -= this.speed;
-            if (keys[DOWN_ARROW]) this.y += this.speed;
+            if (keys[LEFT_ARROW]) this.x -= this.speed * dtFrames;
+            if (keys[RIGHT_ARROW]) this.x += this.speed * dtFrames;
+            if (keys[UP_ARROW]) this.y -= this.speed * dtFrames;
+            if (keys[DOWN_ARROW]) this.y += this.speed * dtFrames;
 
             // Constrain - free movement anywhere on screen
             this.x = constrain(this.x, this.w / 2, width - this.w / 2);
             this.y = constrain(this.y, this.h / 2, height - this.h / 2);
 
             // Shooting
-            if (this.shootCooldown > 0) this.shootCooldown--;
+            if (this.shootCooldown > 0) this.shootCooldown -= dtFrames;
+            if (this.shootCooldown < 0) this.shootCooldown = 0;
             if (keys[32] && this.shootCooldown <= 0) { // SPACE
                 this.shoot();
                 this.shootCooldown = this.maxShootCooldown;
@@ -721,8 +748,8 @@ class Player {
     }
     collidesWith(obj) {
         if (this.invulnerable && this.invulnerableTimer > 0) return false;
-        let d = dist(this.x, this.y, obj.x, obj.y);
-        return d < this.w / 2 + (obj.w ? obj.w / 2 : 5);
+        let r = this.w / 2 + (obj.w ? obj.w / 2 : 5);
+        return distSq(this.x, this.y, obj.x, obj.y) < r * r;
     }
 }
 
@@ -734,8 +761,25 @@ class Bullet {
         this.vx = vx;
         this.vy = vy !== null ? vy : (isPlayer ? -24 : 12);
         this.damage = damage;
-        this.w = 6;
-        this.h = 16;
+        this.w = isPlayer && damage > 10 ? 8 : 6;
+        this.h = isPlayer && damage > 10 ? 24 : 16;
+        this.shadowBlur = isPlayer && damage > 10 ? 20 : 15;
+
+        if (this.isPlayer) {
+            if (damage === 20) {
+                this.r = 0; this.g = 255; this.b = 255;      // Lvl 1: Cyan-Blue
+            } else if (damage === 30) {
+                this.r = 255; this.g = 0; this.b = 255;      // Lvl 2: Magenta
+            } else if (damage >= 40) {
+                this.r = 255; this.g = 50; this.b = 50;      // Lvl 3+: Red
+            } else {
+                this.r = 255; this.g = 200; this.b = 0;      // Lvl 0: Gold
+            }
+        } else {
+            this.r = 255; this.g = 50; this.b = 50;          // Enemy bullets
+        }
+        this.shadowColor = `rgb(${this.r}, ${this.g}, ${this.b})`;
+
         // calculate angle for drawing rotated bullets if they are aimed
         if (vx !== 0 || vy !== null) {
             this.angle = atan2(this.vy, this.vx) - HALF_PI;
@@ -752,26 +796,9 @@ class Bullet {
         translate(this.x, this.y);
         rotate(this.angle);
         noStroke();
-        let col;
-        if (this.isPlayer) {
-            if (this.damage === 20) col = color(0, 255, 255);      // Lvl 1: Cyan-Blue
-            else if (this.damage === 30) col = color(255, 0, 255); // Lvl 2: Magenta
-            else if (this.damage >= 40) col = color(255, 50, 50);  // Lvl 3+: Red
-            else col = color(255, 200, 0);                         // Lvl 0: Gold
-        } else {
-            col = color(255, 50, 50); // Enemy bullets
-        }
-
-        // Visual power boost for player bullets
-        if (this.isPlayer && this.damage > 10) {
-            this.w = 8;
-            this.h = 24;
-            drawingContext.shadowBlur = 20;
-        } else {
-            drawingContext.shadowBlur = 15;
-        }
-        fill(col);
-        drawingContext.shadowColor = col.toString();
+        drawingContext.shadowBlur = this.shadowBlur;
+        drawingContext.shadowColor = this.shadowColor;
+        fill(this.r, this.g, this.b);
         rectMode(CENTER);
         rect(0, 0, this.w, this.h, 3);
         rectMode(CORNER);
@@ -875,8 +902,8 @@ class Bird {
     collidesWith(b) {
         // Only consider collisions with actual bullets
         if (b.isPlayer === undefined) return false;
-        let d = dist(this.x, this.y, b.x, b.y);
-        return d < this.w / 2 + b.w / 2;
+        let r = this.w / 2 + b.w / 2;
+        return distSq(this.x, this.y, b.x, b.y) < r * r;
     }
     takeDamage(amt) {
         this.hp -= amt;
@@ -971,9 +998,7 @@ class Mothership {
     }
     collidesWith(b) {
         // Did the bullet hit the core?
-        let d = dist(this.x, this.y, b.x, b.y);
-        if (d < 50) return true;
-        return false;
+        return distSq(this.x, this.y, b.x, b.y) < 2500;
     }
     collidesWithShield(b) {
         // Did the bullet hit a shield segment?
@@ -983,8 +1008,7 @@ class Mothership {
                 let sy = this.y + sin(s.angle) * this.shieldRadius;
 
                 // Check collisions against full 360 degree 
-                let d = dist(sx, sy, b.x, b.y);
-                if (d < 25) {
+                if (distSq(sx, sy, b.x, b.y) < 625) {
                     s.hp -= b.damage;
                     if (s.hp <= 0) s.active = false;
                     return true;
@@ -1123,7 +1147,7 @@ class PowerUp {
     }
 
     collidesWith(p) {
-        let d = dist(this.x, this.y, p.x, p.y);
-        return d < (this.w / 2 + p.w / 2);
+        let r = this.w / 2 + p.w / 2;
+        return distSq(this.x, this.y, p.x, p.y) < r * r;
     }
 }
