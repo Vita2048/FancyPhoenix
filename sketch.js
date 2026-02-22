@@ -1011,7 +1011,7 @@ class PowerUp {
 
         if (lvl === 1) this.color = color(0, 255, 255);      // Cyan-Blue
         else if (lvl === 2) this.color = color(255, 0, 255); // Magenta
-        else this.color = color(255, 50, 50);               // Red
+        else this.color = color(255, 50, 50);                // Red
 
         if (lvl === 1) this.icon = gunUpgradeLvl1Img;
         else if (lvl === 2) this.icon = gunUpgradeLvl2Img;
@@ -1035,7 +1035,7 @@ class PowerUp {
         let iconSize = 84 * iconScale;
         let glowRadius = 19 + pulse * 3;
 
-        // Subtle radial glow that matches each gun laser color
+        // Subtle radial glow matching each PNG laser color
         let ctx = drawingContext;
         let glowInner;
         let glowMid;
@@ -1053,15 +1053,46 @@ class PowerUp {
             glowMid = 'rgba(255, 120, 120, 0.20)';
             glowOuter = 'rgba(255, 70, 70, 0)';
         }
-        let blueGradient = ctx.createRadialGradient(0, 0, 4, 0, 0, glowRadius);
-        blueGradient.addColorStop(0, glowInner);
-        blueGradient.addColorStop(0.45, glowMid);
-        blueGradient.addColorStop(1, glowOuter);
+        let glowGradient = ctx.createRadialGradient(0, 0, 4, 0, 0, glowRadius);
+        glowGradient.addColorStop(0, glowInner);
+        glowGradient.addColorStop(0.45, glowMid);
+        glowGradient.addColorStop(1, glowOuter);
         ctx.shadowBlur = 12 + pulse * 4;
         ctx.shadowColor = glowMid;
-        ctx.fillStyle = blueGradient;
+        ctx.fillStyle = glowGradient;
         noStroke();
         ellipse(0, 0, glowRadius * 2, glowRadius * 2);
+
+        // Rotating tech rings (inspired by df3487f)
+        let ringDiameter = iconSize * 0.98;
+        drawingContext.shadowBlur = 8 + pulse * 3;
+        drawingContext.shadowColor = glowMid;
+        noFill();
+        stroke(this.color);
+        strokeWeight(2.2);
+        circle(0, 0, ringDiameter);
+
+        drawingContext.shadowBlur = 10 + pulse * 2;
+        stroke(255, 255, 255, 180);
+        strokeWeight(2.8);
+        push();
+        rotate(this.angle * 0.8);
+        arc(0, 0, ringDiameter - 8, ringDiameter - 8, -PI / 5, PI / 2);
+        arc(0, 0, ringDiameter - 8, ringDiameter - 8, PI * 0.78, PI * 1.4);
+        pop();
+
+        // Orbiting energy nodes
+        for (let i = 0; i < 4; i++) {
+            let a = this.angle * 2.8 + i * (TWO_PI / 4);
+            let orbitRadius = ringDiameter * 0.58;
+            let ox = cos(a) * orbitRadius;
+            let oy = sin(a) * orbitRadius;
+            drawingContext.shadowBlur = 10;
+            drawingContext.shadowColor = glowMid;
+            fill(255, 255, 255, 220);
+            noStroke();
+            circle(ox, oy, 4.8 + pulse * 1.1);
+        }
 
         // Render icon asset
         imageMode(CENTER);
@@ -1083,8 +1114,6 @@ class PowerUp {
         drawingContext.shadowColor = '#ffffff';
         fill(255);
         text(this.lvl, 0, 34);
-
-        // Removed orbiting energy nodes for a cleaner look as requested
 
         pop();
     }
